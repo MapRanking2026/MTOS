@@ -1,0 +1,9 @@
+node_modules
+build
+dist
+.next
+.next/**
+.git
+.trae
+.log
+.figma

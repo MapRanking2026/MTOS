@@ -1,0 +1,228 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+
+type Status = {
+  connected: boolean;
+  configured?: boolean;
+  teamId?: string | null;
+  listId?: string | null;
+  lastSyncAt?: string | null;
+};
+
+export function ClickUpConnectorClient({
+  initialStatus,
+  canManage,
+}: {
+  initialStatus: Status;
+  canManage: boolean;
+}) {
+  const [status, setStatus] = React.useState<Status>(initialStatus);
+  const [teamId, setTeamId] = React.useState(initialStatus.teamId ?? "");
+  const [listId, setListId] = React.useState(initialStatus.listId ?? "");
+  const [busy, setBusy] = React.useState(false);
+
+  async function refresh() {
+    const res = await fetch("/api/connectors/clickup/status");
+    const json = (await res.json()) as Status;
+    setStatus(json);
+    setTeamId(json.teamId ?? "");
+    setListId(json.listId ?? "");
+  }
+
+  async function connect() {
+    window.location.href = "/api/connectors/clickup/start";
+  }
+
+  async function save() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connectors/clickup/configure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, listId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("ClickUp configuration saved.");
+      await refresh();
+    } catch {
+      toast.error("Failed to save configuration.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sync() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connectors/clickup/sync", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Synced ClickUp clients.");
+      await refresh();
+    } catch {
+      toast.error("Sync failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerWebhook() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connectors/clickup/webhook/register", { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Webhook registered.");
+      await refresh();
+    } catch {
+      toast.error("Webhook registration failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function detectTeamId() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/connectors/clickup/teams");
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { teams?: Array<{ id?: string | number; name?: string }> };
+      const teams = json.teams ?? [];
+      if (teams.length === 1 && teams[0]?.id != null) {
+        setTeamId(String(teams[0].id));
+        toast.success(`Workspace detected: ${teams[0].name ?? teams[0].id}`);
+      } else if (teams.length > 1) {
+        toast.message("Multiple workspaces found. Pick the correct teamId from ClickUp.");
+      } else {
+        toast.error("No workspaces found for this ClickUp user.");
+      }
+    } catch {
+      toast.error("Failed to detect workspace.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="rounded-xl bg-sidebar-primary/15 text-sidebar-primary ring-1 ring-sidebar-border/70">
+            ClickUp
+          </Badge>
+          <Badge variant="secondary" className="rounded-xl">
+            Connector
+          </Badge>
+          {status.connected ? (
+            <Badge className="rounded-xl bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300">
+              Connected
+            </Badge>
+          ) : (
+            <Badge className="rounded-xl bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-300">
+              Not connected
+            </Badge>
+          )}
+          {status.lastSyncAt ? (
+            <Badge variant="secondary" className="rounded-xl">
+              Last sync {new Date(status.lastSyncAt).toLocaleString()}
+            </Badge>
+          ) : null}
+        </div>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Sync client accounts from ClickUp.
+        </h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Each client is a ClickUp task. Status maps to active/paused/canceled. The assignee’s
+          email maps to the account manager in this app.
+        </p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card className="rounded-2xl border-border/60 bg-card/60 p-4 backdrop-blur-xl">
+          <div className="text-sm font-medium">Connect</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            Authorize Monthly Touch OS to access your ClickUp workspace.
+          </div>
+          <Separator className="my-3 bg-border/60" />
+          <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <Button className="rounded-xl" onClick={connect} disabled={busy}>
+                Connect ClickUp
+              </Button>
+            ) : (
+              <Badge variant="secondary" className="rounded-xl">
+                Managed by Super Admin
+              </Badge>
+            )}
+            <Button variant="secondary" className="rounded-xl" onClick={refresh} disabled={busy}>
+              Refresh status
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="rounded-2xl border-border/60 bg-card/60 p-4 backdrop-blur-xl">
+          <div className="text-sm font-medium">Configure</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            Paste the Workspace (team) ID and the List ID that contains client tasks.
+          </div>
+          <Separator className="my-3 bg-border/60" />
+          <div className="grid gap-2">
+            <Input
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              placeholder="teamId (workspace id)"
+              className="h-10 rounded-xl bg-muted/30 ring-1 ring-border/60"
+              disabled={!canManage}
+            />
+            <Input
+              value={listId}
+              onChange={(e) => setListId(e.target.value)}
+              placeholder="listId"
+              className="h-10 rounded-xl bg-muted/30 ring-1 ring-border/60"
+              disabled={!canManage}
+            />
+            <div className="flex flex-wrap gap-2 pt-1">
+              {canManage ? (
+                <>
+                  <Button className="rounded-xl" onClick={save} disabled={busy || !teamId || !listId}>
+                    Save
+                  </Button>
+                  <Button variant="secondary" className="rounded-xl" onClick={detectTeamId} disabled={busy}>
+                    Detect teamId
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                variant="secondary"
+                className="rounded-xl"
+                onClick={sync}
+                disabled={busy || !status.connected || !status.configured}
+              >
+                Sync now
+              </Button>
+              {canManage ? (
+                <Button variant="secondary" className="rounded-xl" onClick={registerWebhook} disabled={busy}>
+                  Enable auto-sync
+                </Button>
+              ) : null}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Review your assigned clients in{" "}
+              <Link className="text-foreground underline underline-offset-4" href="/clients">
+                Clients
+              </Link>
+              .
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
