@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, Command, Menu, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, Command, LogOut, Menu, Search, SlidersHorizontal } from "lucide-react";
+import { toast } from "sonner";
 
 import { BrandMark } from "@/components/brand/brand-mark";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -16,13 +19,34 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/shell/theme-toggle";
+import type { AppShellData } from "@/lib/mtos-types";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function Topbar({
   onOpenSidebar,
+  data,
 }: {
   onOpenSidebar: () => void;
+  data: AppShellData;
 }) {
+  const router = useRouter();
   const [query, setQuery] = React.useState("");
+  const [loggingOut, setLoggingOut] = React.useState(false);
+
+  async function signOut() {
+    setLoggingOut(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      toast.success("Signed out.");
+      router.push("/login");
+      router.refresh();
+    } catch {
+      toast.error("Failed to sign out.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div className="sticky top-0 z-40">
@@ -54,6 +78,9 @@ export function Topbar({
             />
           </div>
           <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="rounded-xl">
+              {data.source === "setup" ? "Workspace Setup" : data.tenant.name}
+            </Badge>
             <span className="hidden lg:inline-flex items-center gap-2 rounded-lg bg-muted/40 px-2.5 py-1 ring-1 ring-border/60">
               <Command className="size-3.5" />
               Ctrl K
@@ -62,6 +89,23 @@ export function Topbar({
         </div>
 
         <div className="ml-auto flex items-center gap-1.5 md:ml-0">
+          <Button variant="ghost" size="icon" className="rounded-xl" asChild>
+            <Link href="/settings" aria-label="Open settings">
+              <SlidersHorizontal className="size-4" />
+            </Link>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl"
+            aria-label="Sign out"
+            onClick={signOut}
+            disabled={loggingOut}
+          >
+            <LogOut className="size-4" />
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -74,27 +118,20 @@ export function Topbar({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Live Alerts</DropdownMenuLabel>
+              <DropdownMenuLabel>Alerts</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/churn" className="flex flex-col items-start gap-0.5">
-                  <span className="text-sm">Sentiment drop detected</span>
-                  <span className="text-xs text-muted-foreground">
-                    Recommend Recovery Call within 72 hours
-                  </span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link
-                  href="/clients/atlas-dental/overview"
-                  className="flex flex-col items-start gap-0.5"
-                >
-                  <span className="text-sm">Momentum up +18%</span>
-                  <span className="text-xs text-muted-foreground">
-                    Keyword refinements improved stability
-                  </span>
-                </Link>
-              </DropdownMenuItem>
+              {data.alerts.length === 0 ? (
+                <DropdownMenuItem disabled>No alerts right now.</DropdownMenuItem>
+              ) : (
+                data.alerts.map((alert) => (
+                  <DropdownMenuItem key={alert.id} asChild>
+                    <Link href={alert.href} className="flex flex-col items-start gap-0.5">
+                      <span className="text-sm">{alert.title}</span>
+                      <span className="text-xs text-muted-foreground">{alert.detail}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import { isSuperAdmin } from "@/lib/authz";
+import { upsertClickUpConnection } from "@/lib/clickup-connection";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { encryptString } from "@/lib/crypto";
@@ -31,9 +31,6 @@ export async function GET(req: Request) {
   const { data } = await supabase.auth.getUser();
   if (!data.user) {
     return NextResponse.redirect(new URL("/login", url.origin));
-  }
-  if (!(await isSuperAdmin(data.user.id))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const expectedState = (await cookies()).get("cu_state")?.value;
@@ -69,10 +66,33 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "ClickUp token response missing access_token." }, { status: 500 });
   }
 
-  const accessTokenEnc = encryptString(tokenJson.access_token);
+  let accessTokenEnc: string;
+  try {
+    accessTokenEnc = encryptString(tokenJson.access_token);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Failed to encrypt ClickUp access token.",
+        details: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    );
+  }
 
   const admin = createSupabaseAdminClient();
-  await admin.schema("private").from("clickup_connection").update({ access_token_enc: accessTokenEnc }).eq("id", 1);
+  try {
+    await upsertClickUpConnection(admin, data.user.id, {
+      access_token_enc: accessTokenEnc,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: "Failed to save ClickUp connection.",
+        details: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 }
+    );
+  }
 
   const res = NextResponse.redirect(new URL("/connectors/clickup", url.origin));
   res.cookies.delete("cu_state");

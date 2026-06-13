@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MTOS
 
-## Getting Started
+MTOS, or Monthly Touch OS, is a Supabase-first client success operating system for agencies and service businesses. It helps account teams prepare for recurring client meetings, monitor churn risk, capture opportunities, and turn conversations into accountable follow-up work.
 
-First, run the development server:
+## What Is Included
+
+- Next.js 16 App Router application in `src/app`
+- Supabase-backed auth and server data access in `src/lib/supabase`
+- MTOS workspace domain layer in `src/lib/mtos-data.ts`
+- Expanded Supabase schema in `supabase/migrations/0003_mtos_workspace.sql`
+- ClickUp connector routes under `src/app/api/connectors/clickup`
+- AI meeting brief route grounded in client context under `src/app/api/ai/meeting-brief`
+
+## Rebuild Highlights
+
+- Replaced hard-coded dashboard mock content with a shared MTOS workspace model
+- Added a Supabase migration for meetings, action items, client signals, opportunities, and wiki documents
+- Turned the dashboard, clients, overview, timeline, churn, and settings pages into data-driven operator surfaces
+- Grounded AI meeting brief generation with real client context and a deterministic fallback response
+- Added demo workspace fallback so the app still runs cleanly before Supabase is fully seeded
+
+## Run Locally
+
+1. Install dependencies:
+
+```bash
+npm ci
+```
+
+2. Configure environment variables in `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPER_ADMIN_EMAIL=you@example.com
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+```
+
+3. Apply the Supabase migrations, including `0003_mtos_workspace.sql`.
+
+4. Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Verify production readiness:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Notes
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- The app intentionally uses `Supabase` only for data and auth. No MongoDB is used in this workspace.
+- If Supabase tables or credentials are not ready yet, MTOS falls back to a demo workspace so core pages still render.

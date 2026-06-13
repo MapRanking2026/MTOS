@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { getAppShellData } from "@/lib/mtos-data";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AppLayout({
@@ -15,5 +16,7 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  return <AppShell>{children}</AppShell>;
+  const shellData = await getAppShellData();
+
+  return <AppShell data={shellData}>{children}</AppShell>;
 }

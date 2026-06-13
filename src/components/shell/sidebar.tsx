@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Activity,
+  AlertTriangle,
   Bot,
   LayoutGrid,
   PlugZap,
@@ -14,17 +15,21 @@ import {
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand/brand-mark";
 import { NavLink } from "@/components/shell/nav-link";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-
-const clientId = "atlas-dental";
+import type { AppShellData } from "@/lib/mtos-types";
 
 export function Sidebar({
   collapsed,
   className,
+  data,
 }: {
   collapsed?: boolean;
   className?: string;
+  data: AppShellData;
 }) {
+  const featuredClient = data.clients[0];
+
   return (
     <aside
       className={cn(
@@ -55,24 +60,6 @@ export function Sidebar({
           collapsed={collapsed}
         />
         <NavLink
-          href={`/clients/${clientId}/overview`}
-          label="Client Overview"
-          icon={<Activity className="size-4" />}
-          collapsed={collapsed}
-        />
-        <NavLink
-          href={`/clients/${clientId}/meeting-brief`}
-          label="AI Meeting Brief"
-          icon={<Bot className="size-4" />}
-          collapsed={collapsed}
-        />
-        <NavLink
-          href={`/clients/${clientId}/timeline`}
-          label="Meeting Timeline"
-          icon={<Activity className="size-4" />}
-          collapsed={collapsed}
-        />
-        <NavLink
           href="/churn"
           label="Churn Monitoring"
           icon={<ShieldAlert className="size-4" />}
@@ -91,6 +78,77 @@ export function Sidebar({
           collapsed={collapsed}
         />
       </div>
+
+      {!collapsed && featuredClient ? (
+        <>
+          <Separator className="bg-sidebar-border/60" />
+          <div className="px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Focus Client
+              </div>
+              <Badge variant="secondary" className="rounded-lg px-2 py-0.5 text-[10px]">
+                {data.source === "setup" ? "Setup" : "Live"}
+              </Badge>
+            </div>
+            <div className="rounded-2xl border border-sidebar-border/70 bg-sidebar-accent/40 p-3">
+              <div className="text-sm font-medium">{featuredClient.name}</div>
+              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Health {featuredClient.healthScore}</span>
+                <span>Risk {featuredClient.churnRisk}%</span>
+              </div>
+              <div className="mt-3 grid gap-1.5">
+                <NavLink
+                  href={featuredClient.href}
+                  label="Client Overview"
+                  icon={<Activity className="size-4" />}
+                  collapsed={false}
+                />
+                <NavLink
+                  href={featuredClient.href.replace("/overview", "/meeting-brief")}
+                  label="AI Meeting Brief"
+                  icon={<Bot className="size-4" />}
+                  collapsed={false}
+                />
+                <NavLink
+                  href={featuredClient.href.replace("/overview", "/timeline")}
+                  label="Meeting Timeline"
+                  icon={<Activity className="size-4" />}
+                  collapsed={false}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {!collapsed && data.alerts.length > 0 ? (
+        <>
+          <Separator className="bg-sidebar-border/60" />
+          <div className="px-3 py-3">
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Watchlist
+            </div>
+            <div className="grid gap-2">
+              {data.alerts.slice(0, 3).map((alert) => (
+                <a
+                  key={alert.id}
+                  href={alert.href}
+                  className="rounded-xl border border-sidebar-border/70 bg-sidebar-accent/30 p-3 text-sm transition hover:bg-sidebar-accent/50"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{alert.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-muted-foreground">{alert.detail}</div>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
 
       <div className="mt-auto px-2 pb-3">
         <NavLink

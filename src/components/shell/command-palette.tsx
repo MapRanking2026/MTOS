@@ -4,7 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  Bot,
+  AlertTriangle,
   LayoutGrid,
   PlugZap,
   ShieldAlert,
@@ -23,10 +23,9 @@ import {
   CommandShortcut,
   CommandSeparator,
 } from "@/components/ui/command";
+import type { AppShellData } from "@/lib/mtos-types";
 
-const clientId = "atlas-dental";
-
-export function CommandPalette() {
+export function CommandPalette({ data }: { data: AppShellData }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
 
@@ -59,18 +58,6 @@ export function CommandPalette() {
               Command Center
               <CommandShortcut>↵</CommandShortcut>
             </CommandItem>
-            <CommandItem onSelect={() => run(`/clients/${clientId}/overview`)}>
-              <Activity className="size-4" />
-              Client Overview
-            </CommandItem>
-            <CommandItem onSelect={() => run(`/clients/${clientId}/meeting-brief`)}>
-              <Bot className="size-4" />
-              AI Meeting Brief
-            </CommandItem>
-            <CommandItem onSelect={() => run(`/clients/${clientId}/timeline`)}>
-              <Activity className="size-4" />
-              Meeting Timeline
-            </CommandItem>
             <CommandItem onSelect={() => run("/churn")}>
               <ShieldAlert className="size-4" />
               Churn Monitoring
@@ -88,6 +75,36 @@ export function CommandPalette() {
               ClickUp Connector
             </CommandItem>
           </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Clients">
+            {data.clients.length === 0 ? (
+              <CommandItem disabled>
+                <Users className="size-4" />
+                No clients loaded
+              </CommandItem>
+            ) : (
+              data.clients.map((client) => (
+                <CommandItem key={client.id} onSelect={() => run(client.href)}>
+                  <Activity className="size-4" />
+                  {client.name}
+                  <CommandShortcut>{client.healthScore}</CommandShortcut>
+                </CommandItem>
+              ))
+            )}
+          </CommandGroup>
+          {data.alerts.length > 0 ? (
+            <>
+              <CommandSeparator />
+              <CommandGroup heading="Alerts">
+                {data.alerts.slice(0, 4).map((alert) => (
+                  <CommandItem key={alert.id} onSelect={() => run(alert.href)}>
+                    <AlertTriangle className="size-4" />
+                    {alert.title}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </>
+          ) : null}
           <CommandSeparator />
           <CommandGroup heading="System">
             <CommandItem onSelect={() => run("/settings")}>

@@ -24,7 +24,8 @@ export default async function ClickUpConnectorPage() {
     teamId: string | null;
     listId: string | null;
     lastSyncAt: string | null;
-    canManage?: boolean;
+    oauthReady?: boolean;
+    oauthError?: string | null;
   };
 
   return (
@@ -35,8 +36,9 @@ export default async function ClickUpConnectorPage() {
         teamId: status.teamId ?? null,
         listId: status.listId ?? null,
         lastSyncAt: status.lastSyncAt ?? null,
+        oauthReady: status.oauthReady ?? true,
+        oauthError: status.oauthError ?? null,
       }}
-      canManage={Boolean(status.canManage)}
     />
   );
 }

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -9,7 +11,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  countOverdueActions,
+  getNextMeetingForClient,
+  getWorkspaceSnapshot,
+} from "@/lib/mtos-data";
 
 function StatusBadge({ status }: { status: "active" | "paused" | "canceled" }) {
   if (status === "active") {
@@ -34,15 +40,19 @@ function StatusBadge({ status }: { status: "active" | "paused" | "canceled" }) {
 }
 
 export default async function ClientsPage() {
-  const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.getUser();
+  const workspace = await getWorkspaceSnapshot();
 
-  const userId = data.user?.id ?? "";
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id,name,status,clickup_task_id,updated_at")
-    .eq("account_manager_user_id", userId)
-    .order("updated_at", { ascending: false });
+  const clientStats = workspace.clients.map((client) => {
+    const actions = workspace.actions.filter((action) => action.clientId === client.id);
+    const upcomingMeeting = getNextMeetingForClient(workspace.meetings, client.id);
+
+    return {
+      ...client,
+      openActions: actions.filter((action) => action.status !== "done").length,
+      overdueActions: countOverdueActions(actions),
+      nextMeetingAt: upcomingMeeting?.meetingAt ?? client.nextMeetingAt,
+    };
+  });
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -52,14 +62,14 @@ export default async function ClientsPage() {
             Clients
           </Badge>
           <Badge variant="secondary" className="rounded-xl">
-            Assigned to you
+            {workspace.source === "setup" ? "Live workspace" : "Assigned to you"}
           </Badge>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight">
-          Your client list (synced from ClickUp).
+          Client accounts, health signals, and next actions.
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          Active, paused, and canceled clients update based on ClickUp task status and assignee.
+          {workspace.sourceMessage}
         </p>
       </div>
 
@@ -67,7 +77,7 @@ export default async function ClientsPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium">Client Accounts</div>
           <Badge variant="secondary" className="rounded-xl">
-            {clients?.length ?? 0}
+            {clientStats.length}
           </Badge>
         </div>
         <Separator className="my-3 bg-border/60" />
@@ -76,28 +86,40 @@ export default async function ClientsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Client</TableHead>
+              <TableHead>Health</TableHead>
+              <TableHead>Risk</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>ClickUp Task</TableHead>
-              <TableHead>Updated</TableHead>
+              <TableHead>Open Actions</TableHead>
+              <TableHead>Next Meeting</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(clients ?? []).length === 0 ? (
+            {clientStats.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                  No clients yet. Connect ClickUp and run a sync.
+                <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  No live clients yet. Connect a data source or add client records to populate this dashboard.
                 </TableCell>
               </TableRow>
             ) : (
-              (clients ?? []).map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={c.status} />
+              clientStats.map((client) => (
+                <TableRow key={client.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/clients/${client.slug}/overview`} className="hover:underline">
+                      {client.name}
+                    </Link>
+                    <div className="mt-1 text-xs text-muted-foreground">{client.industry}</div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{c.clickup_task_id ?? "—"}</TableCell>
+                  <TableCell>{client.healthScore}</TableCell>
+                  <TableCell className="text-muted-foreground">{client.churnRisk}%</TableCell>
+                  <TableCell>
+                    <StatusBadge status={client.status} />
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {c.updated_at ? new Date(c.updated_at).toLocaleString() : "—"}
+                    {client.openActions}
+                    {client.overdueActions > 0 ? ` (${client.overdueActions} overdue)` : ""}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {client.nextMeetingAt ? new Date(client.nextMeetingAt).toLocaleString() : "Not scheduled"}
                   </TableCell>
                 </TableRow>
               ))
@@ -108,4 +130,3 @@ export default async function ClientsPage() {
     </div>
   );
 }
-

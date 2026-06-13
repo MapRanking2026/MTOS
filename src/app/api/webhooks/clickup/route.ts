@@ -1,28 +1,25 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 
+import { getClickUpConnectionByWebhookId, touchClickUpLastSync } from "@/lib/clickup-connection";
+import {
+  buildClientSlug,
+  buildTenantFirstNameUserMap,
+  CLICKUP_CLIENT_HEALTH_TRACKER_LIST_ID,
+  extractAccountManagerName,
+  normalizeFirstName,
+  normalizeStatus,
+  type ClickUpTask,
+} from "@/lib/clickup-client-sync";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { decryptString } from "@/lib/crypto";
+import { getWorkspaceContextForUser } from "@/lib/workspace";
 
 type WebhookPayload = {
   webhook_id?: string;
   event?: string;
   task_id?: string;
 };
-
-type ClickUpTask = {
-  id: string;
-  name: string;
-  status?: { status?: string };
-  assignees?: Array<{ email?: string }>;
-};
-
-function normalizeStatus(raw?: string) {
-  const v = (raw ?? "").toLowerCase();
-  if (v.includes("pause")) return "paused";
-  if (v.includes("cancel")) return "canceled";
-  return "active";
-}
 
 function safeEqual(a: string, b: string) {
   const ab = Buffer.from(a);
@@ -47,12 +44,7 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: conn } = await admin
-    .schema("private")
-    .from("clickup_connection")
-    .select("access_token_enc, webhook_secret, webhook_id")
-    .eq("id", 1)
-    .maybeSingle();
+  const conn = await getClickUpConnectionByWebhookId(admin, payload.webhook_id);
 
   if (!conn?.access_token_enc || !conn.webhook_secret || !conn.webhook_id) {
     return NextResponse.json({ error: "Unknown webhook." }, { status: 404 });
@@ -80,28 +72,45 @@ export async function POST(req: Request) {
   }
 
   const task = (await taskRes.json()) as ClickUpTask;
-  const status = normalizeStatus(task.status?.status);
-  const assigneeEmail = task.assignees?.[0]?.email;
+  const taskListId = task.list?.id == null ? null : String(task.list.id);
+  if (taskListId && taskListId !== CLICKUP_CLIENT_HEALTH_TRACKER_LIST_ID) {
+    return NextResponse.json({ ok: true, ignored: true });
+  }
 
-  let managerUserId: string | null = null;
-  if (assigneeEmail) {
-    const { data: profile } = await admin
-      .from("user_profiles")
-      .select("id")
-      .eq("email", assigneeEmail)
-      .maybeSingle();
-    if (profile?.id) managerUserId = profile.id;
+  const workspace = await getWorkspaceContextForUser(conn.user_id);
+  if (!workspace?.tenant.id) {
+    return NextResponse.json({ ok: true, ignored: true });
+  }
+
+  const status = normalizeStatus(task.status?.status);
+  const accountManagerFirstName = normalizeFirstName(extractAccountManagerName(task));
+  if (!accountManagerFirstName) {
+    return NextResponse.json({ ok: true, ignored: true });
+  }
+
+  const { byFirstName, ambiguousFirstNames } = await buildTenantFirstNameUserMap(admin, workspace.tenant.id);
+  if (ambiguousFirstNames.has(accountManagerFirstName)) {
+    return NextResponse.json({ ok: true, ignored: true, ambiguous: true });
+  }
+
+  const managerUserId = byFirstName.get(accountManagerFirstName);
+  if (!managerUserId) {
+    return NextResponse.json({ ok: true, ignored: true });
   }
 
   await admin.from("clients").upsert(
     {
       clickup_task_id: task.id,
       name: task.name,
+      slug: buildClientSlug(task.name, task.id),
       status,
+      tenant_id: workspace.tenant.id,
       account_manager_user_id: managerUserId,
     },
     { onConflict: "clickup_task_id" }
   );
+
+  await touchClickUpLastSync(admin, conn.user_id, new Date().toISOString());
 
   return NextResponse.json({ ok: true });
 }

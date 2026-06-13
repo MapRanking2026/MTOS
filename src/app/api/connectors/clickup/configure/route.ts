@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/authz";
+import { upsertClickUpConnection } from "@/lib/clickup-connection";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -9,9 +9,6 @@ export async function POST(req: Request) {
   const { data } = await supabase.auth.getUser();
   if (!data.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!(await isSuperAdmin(data.user.id))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: unknown;
@@ -34,14 +31,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "teamId and listId are required" }, { status: 400 });
   }
 
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin
-    .schema("private")
-    .from("clickup_connection")
-    .update({ team_id: teamId, list_id: listId })
-    .eq("id", 1);
-
-  if (error) {
+  try {
+    const admin = createSupabaseAdminClient();
+    await upsertClickUpConnection(admin, data.user.id, {
+      team_id: teamId,
+      list_id: listId,
+    });
+  } catch {
     return NextResponse.json({ error: "Failed to save configuration" }, { status: 500 });
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { isSuperAdmin } from "@/lib/authz";
+import { getClickUpConnection } from "@/lib/clickup-connection";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { decryptString } from "@/lib/crypto";
@@ -11,17 +11,9 @@ export async function GET() {
   if (!data.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!(await isSuperAdmin(data.user.id))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const admin = createSupabaseAdminClient();
-  const { data: conn } = await admin
-    .schema("private")
-    .from("clickup_connection")
-    .select("access_token_enc")
-    .eq("id", 1)
-    .maybeSingle();
+  const conn = await getClickUpConnection(admin, data.user.id);
 
   if (!conn?.access_token_enc) {
     return NextResponse.json({ error: "ClickUp is not connected." }, { status: 400 });
